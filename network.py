@@ -2,6 +2,10 @@ from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
 from mininet.topo import Topo
 from itertools import cycle
+from mininet.link import TCLink
+from mininet.cli import CLI
+from mininet.node import Controller
+from functools import partial
 
 
 class FatTree(Topo):
@@ -27,3 +31,13 @@ class FatTree(Topo):
             self.addLink(h, e)
             for ei, e in enumerate(edges)
             for h in hosts[ei * 2 : (ei + 1) * 2]]
+
+
+def setup(ctrl_port=6653):
+    topo = FatTree()
+    switch = partial(OVSSwitch, protocols='OpenFlow13', failMode='secure')
+    net = Mininet(topo=topo, switch=switch, link=TCLink, controller=None, autoSetMacs=True, autoStaticArp=False)
+    net.addController('c0', controller=RemoteController, ip='127.0.0.1', port=ctrl_port)
+    net.start()
+    CLI(net)
+    
