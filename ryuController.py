@@ -7,6 +7,7 @@ from ryu.lib.packet import packet, ethernet, ether_types
 from ryu.topology import event
 from ryu.topology.api import get_link, get_switch
 import networkx as nx
+import itertools
 
 
 class RyuCtrl(app_manager.RyuApp):
@@ -55,7 +56,7 @@ class RyuCtrl(app_manager.RyuApp):
         
         # Ignore if downstream
         if in_port in self.uplink_ports.get(dpid, set()):
-        return
+            return
 
         src = eth.src; dst = eth.dst
         self.mac_to_port.setdefault(dpid, {})[src] = in_port
@@ -81,6 +82,7 @@ class RyuCtrl(app_manager.RyuApp):
                              idle_timeout=60))
         self._packet_out(dp, msg, in_port, actions)
 
+    # --- helpers ---
 
     def _packet_out(self, dp, msg, in_port, actions):
         ofp, p = dp.ofproto, dp.ofproto_parser
@@ -88,6 +90,20 @@ class RyuCtrl(app_manager.RyuApp):
         dp.send_msg(p.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
                                in_port=in_port, actions=actions, data=data))
 
-    # --- helpers ---
-    def _rr_load_balance()
+    
+    def _rr_load_balance(self, dpid, dst, in_port):
+        if not hasattr(self, 'rr_cycles'):
+            self.rr_cycles = {}
+
+        uplinks = sorted(self.uplink_ports.get(dpid, set()))
+
+        if not uplinks:
+            self.logger.warning(f"No uplink ports found for switch {dpid}")
+            return self.dp_by_id[dpid].ofproto.OFPP_FLOOD
+
+        if dpid not in self.rr_cycles:
+            self.rr_cycles[dpid] = itertools.cycle(uplinks)
+
+        return next(self.rr_cycles[dpid])
+            
 
