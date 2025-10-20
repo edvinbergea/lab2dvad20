@@ -13,13 +13,12 @@ from ryu.base.app_manager import require_app
 require_app('ryu.topology.switches')
 
 
-PRIO_MISS = 0
-PRIO_LLDP = 1000
-PRIO_UPLINK_NORMAL = 50
-PRIO_HOST_FLOWS = 100
-IDLE_TIMEOUT = 60
-HARD_TIMEOUT = 0
 NUM_SWITCHES = 20
+PRIO_LLDP = 1000
+PRIO_BALANCED = 500
+PRIO_NORMAL = 100
+PRIO_DEFAULT = 50
+PRIO_MISS = 0
 
 
 class RyuCtrl(app_manager.RyuApp):
@@ -63,8 +62,7 @@ class RyuCtrl(app_manager.RyuApp):
         deg = dict(G.degree())
         maxdeg = max(deg.values())
         cores = [n for n in G.nodes if deg[n] == maxdeg]
-        agg_switches = [s for s in G.nodes if deg[s] == maxdeg-1]
-        edge_switches = [s for s in G.nodes if deg[s] == maxdeg-2]
+        ae_switches = [s for s in G.nodes if deg[s] < maxdeg]
 
         # 4) Distance to nearest core
         dist = {n: math.inf for n in G.nodes}
@@ -82,20 +80,20 @@ class RyuCtrl(app_manager.RyuApp):
                 else:
                     self.downlink_ports[u].add(e['src_port'])
 
-        self._install_layer_rules(cores, agg_switches, edge_switches)
+        self._install_layer_rules(cores, ae_switches)
 
         self.topo_done = True
 
-    def _install_layer_rules(cores, agg_switches, edge_switches):   
+    def _install_layer_rules(cores, ae_switches):   
         for c in cores:
             dp = self.dp_by_id[c]
             ofp = dp.ofproto
             p = dp.ofproto_parser
-            actions_c = [p.OFPActionOutput(ofproto.OFPP_FLOOD)]
-            inst_c = [p.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions_c)]
-            dp.send_msg(p.OFPFlowMod(datapath=dp, priority=10, match=p.OFPMatch(), instructions=inst_c)
+            actions_c = [p.OFPActionOutput(ofp.OFPP_FLOOD)]
+            inst_c = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions_c)]
+            dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_DEFAULT, match=p.OFPMatch(), instructions=inst_c)
         
-        for s in agg_switches + edge_switches:
+        for s in ae_switches:
             dp = self.dp_by_id[s]
             ofp = dp.ofproto
             p = dp.ofproto_parser
@@ -104,7 +102,7 @@ class RyuCtrl(app_manager.RyuApp):
             for port in down_ports:
                 added_actions = [parser.OFPActionOutput(po) for po in [p for p in down_ports if p != port]]
                 inst_ae = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions_ae + added_actions)]
-                s.send_msg(p.OFPFlowMod(datapath=a, priority=10, match=p.OFPMatch(in_port=port), instructions=inst_ae)
+                s.send_msg(p.OFPFlowMod(datapath=a, priority=PRIO_DEFAULT, match=p.OFPMatch(in_port=port), instructions=inst_ae)
 
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
@@ -117,10 +115,10 @@ class RyuCtrl(app_manager.RyuApp):
         inst = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
 
         match_all = p.OFPMatch()
-        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=0, match=match_all, instructions=inst))
+        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_MISS, match=match_all, instructions=inst))
 
         match_lldp = p.OFPMatch(eth_type=0x88cc)
-        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=1000, match=match_lldp, instructions=inst))
+        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_LLDP, match=match_lldp, instructions=inst))
 
         self.mac_to_port[dp.id] = {}
         self.dp_by_id[dp.id] = dp
@@ -146,23 +144,12 @@ class RyuCtrl(app_manager.RyuApp):
         if eth.ethertype == 0x88cc:
             return
 
+        self._learn_stuff(in_port, src, dp, p, ofp)
+
         if in_port in self.downlink_ports_ports.get(dpid, set()):
             self._packet_in_upstream(dp, in_port, msg, src, dst)
-        elif in_port in self.uplink_ports.get(dpid, set()):
-            self._packet_in_downstream(dp, in_port, msg, src, dst)
         else:
             pass
-
-        if dst in self.mac_to_port[dpid]:
-            out_port = self.mac_to_port[dpid][dst]
-            actions = [p.OFPActionOutput(out_port)]
-            match = p.OFPMatch(in_port=in_port, eth_src=src, eth_dst=dst)
-            dp.send_msg(p.OFPFlowMod(datapath=dp, priority=100,
-                                    match=match,
-                                    instructions=[p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)],
-                                    idle_timeout=60))
-            self._packet_out(dp, msg, in_port, actions)
-            return
 
     # --- helpers ---
     
@@ -175,15 +162,8 @@ class RyuCtrl(app_manager.RyuApp):
         match = p.OFPMatch(in_port=in_port, eth_src=src, eth_dst=dst)
         actions = [p.OFPActionOutput(next_port)]
         inst = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
-        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=100, match=match, instructions=inst, idle_timeout=60)
+        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_BALANCED, match=match, instructions=inst, idle_timeout=60)
         self._packet_out(dp, msg, in_port, actions)
-
-    def _packet_in_downstream(self, dp, in_port, msg, src, dst):
-        ofp = dp.ofproto
-        p = dp.ofproto_parser
-        dpid = dp.id
-
-        self.mac_to_port.setdefault(dpid, {})[src] = in_port
 
     def _packet_out(self, dp, msg, in_port, actions):
         ofp, p = dp.ofproto, dp.ofproto_parser
@@ -191,6 +171,10 @@ class RyuCtrl(app_manager.RyuApp):
         dp.send_msg(p.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
                                in_port=in_port, actions=actions, data=data))
 
+    def _learn_stuff(in_port, src, dp, p, ofp):
+        actions = [p.OFPActionOutput(in_port)]
+        inst = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
+        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_NORMAL, match=p.OFPMatch(eth_dst=src), instructions=inst)
     
     def _rr_load_balance(self, dpid, dst, in_port):
         uplinks = sorted(self.uplink_ports.get(dpid, set()))
