@@ -25,7 +25,7 @@ class RyuCtrl(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(RyuCtrl, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
         self.dp_by_id = {}
         self.rr_cycles = {}
@@ -39,6 +39,7 @@ class RyuCtrl(app_manager.RyuApp):
     @set_ev_cls(event.EventSwitchEnter)
     def topo_update(self, ev):
         self.seen_switches += 1
+        print(f"num of switches linked: {self.seen_switches}")
         if self.seen_switches < NUM_SWITCHES:
             return
 
@@ -118,6 +119,7 @@ class RyuCtrl(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features(self, ev):
         dp = ev.msg.datapath
+        print(f"Switch connected: {dp.id}")
         ofp = dp.ofproto
         p   = dp.ofproto_parser
         
@@ -137,6 +139,7 @@ class RyuCtrl(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in(self, ev):
         if not self.topo_done:
+            print("blocking, topo not ready...")
             return
 
         msg = ev.msg
@@ -149,6 +152,7 @@ class RyuCtrl(app_manager.RyuApp):
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocol(ethernet.ethernet)
         src = eth.src; dst = eth.dst
+        print(f"{src} contacting {dst}")
 
         # Ignore LLDP
         if eth.ethertype == 0x88cc:
