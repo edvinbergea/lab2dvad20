@@ -88,6 +88,14 @@ class RyuCtrl(app_manager.RyuApp):
         self.topo_done = True
 
     def _install_layer_rules(self, cores, ae_switches):
+        for c in cores:
+            dp = self.dp_by_id[c]
+            ofp = dp.ofproto
+            p = dp.ofproto_parser
+            actions_c = [p.OFPActionOutput(ofp.OFPP_FLOOD)]
+            inst_c = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions_c)]
+            dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_DEFAULT, match=p.OFPMatch(), instructions=inst_c))
+
         for sw_id in ae_switches:
             dp = self.dp_by_id.get(sw_id)
             ofp = dp.ofproto
