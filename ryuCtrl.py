@@ -10,51 +10,57 @@ from ryu.topology.api import get_link, get_switch
 
 PRIO_MISS = 0
 PRIO_LLDP = 1000
+UP = 1
+DOWN = 0
 
-agg_switches = {}
-edge_switches = {}
+S1, S2, S3, S4 = 1, 2, 3, 4
+PORTS = {
+    1: {  # S1
+        2: 1,   # to S2
+        4: 2,   # to S4
+    },
+    2: {  # S2
+        1: 1,   # to S1
+        3: 2,   # to S3
+    },
+    3: {  # S3
+        2: 1,   # to S2
+        4: 2,   # to S4
+    },
+    4: {  # S4
+        3: 2,   # to S3
+        1: 1,   # to S1
+    }
+}
+
+L2R_PATHS = [[2, 3, 4], [2, 1, 4]]
+R2L_PATHS = [[4, 3, 2], [4, 1, 2]]
+
+UP_PORTS = {
+    1: [],
+    2: [1, 2],
+    3: [],
+    4: [1, 2]
+}
+DOWN_PORTS = {
+    1: [1, 2],
+    2: [3, 4],
+    3: [1, 2],
+    4: [3, 4]
+}
 
 class ryuCtrl(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.G = nx.Graph()
+        self.dpid_to_dp = {}
+        self.l2r_paths_cycle = itertools.cycle(L2R_PATHS)
+        self.r2l_paths_cycle = itertools.cycle(R2L_PATHS)
         self.flows = []
-        self.mac_to_dp = {}
-        self.dp_to_cycle = {}
-        self.dp_paths = {}
-    
-    @set_ev_cls(event.EventLinkAdd)
-    def update_topo(self, ev):
-        self.links_added += 1
-        self.logger.info("Hello link")
-        link = ev.link
-        src = link.src
-        dst = link.dst
+        self.flow_to_path = {}
 
-        src_dpid = src.dpid
-        dst_dpid = dst.dpid
-        src_port = src.port_no
-        dst_port = dst.port_no
 
-        if src_dpid not in self.G:
-            self.G.add_node(src_dpid)
-        if dst_dpid not in self.G:
-            self.G.add_node(dst_dpid)
-
-        self.G.add_edge(
-            src_dpid, dst_dpid,
-            src_port=src_port,
-            dst_port=dst_port
-        )
-        for switch in self.G.nodes:
-            for neighbor in self.G.neighbors(s)
-                self.dp_paths[s] = 
-
-    def _find_paths(src, dst):
-        return list(nx.all_shortest_paths(self.G, src, dst))
-    
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features(self, ev):
         dp = ev.msg.datapath
@@ -70,8 +76,7 @@ class ryuCtrl(app_manager.RyuApp):
         match_lldp = p.OFPMatch(eth_type=0x88cc)
         dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_LLDP, match=match_lldp, instructions=inst))
 
-
-    def _update_cycles(paths):
+        self.dpid_to_dp[dp.id] = dp
 
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -79,6 +84,7 @@ class ryuCtrl(app_manager.RyuApp):
         msg = ev.msg
         dp = msg.datapath
         ofp, p = dp.ofproto, dp.ofproto_parser
+        dpid = dp.id
         in_port = msg.match.get('in_port')
 
         pkt = packet.Packet(msg.data)
@@ -92,33 +98,55 @@ class ryuCtrl(app_manager.RyuApp):
 
         src, dst = eth.src, eth.dst
         self.logger.info("PacketIn on s%s:%s  %s -> %s: Type = %s", dp.id, in_port, src, dst, eth.ethertype)
-        
-        if
 
-        if dpid not in self.mac_to_dp[src]:
-            self.mac_to_dp[src] = dpid
-        
         flow = (src, dst)
         if flow not in self.flows:
-            if 
-            self.flows.append((src, dst))
-            try:
-                paths = self._find_paths(dpid, self.mac_to_dp[dst])
-                self._update_cycles(dp, paths)
-            except:
-                return
+            print(f"new flow: {flow}")
+            self.flows.append(flow)
+            self.flow_to_path[flow] = self._pick_path(dpid)
         
-            if not self.dp_to_cycle[dpid]
-                self.dp_to_cycle[dpid] = itertools.cycle(self._find_paths(dpid, self.mac_to_dp[dst]))
-            path = next(self.dp_to_cycle[dpid])
+        direction = UP if in_port in DOWN_PORTS[dpid] else DOWN # 1 if up and 0 if down
+        if direction == UP:
+            path = self.flow_to_path[flow]
+            print(f"path: {path} dpid: {dpid}")
             i = path.index(dpid)
-            nxt = path[i + 1]
-            next_port = self.G[dpid][nxt]['src_port']
+            nxt_switch = path[i+1]
+            print(f"next switch: {nxt_switch}")
+            nxt_port = PORTS[dpid][nxt_switch]
+            
+            direction = 1 if in_port in UP_PORTS[dpid] else 0 # 1 if up and 0 if down
 
-            actions = [p.OFPActionOutput(next_port)]
-            inst = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
-            match = p.OFPMatch(eth_src=src, eth_dst=dst)
-            dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_MISS, match=match, instructions=inst))
+            if dpid == S1 or dpid == S3:    # In agg layer
+                self._flood_down(dp, ofp, p, in_port, msg.data)
+                #self._learn_edge_agg()
+            else:                           # In edge layer
+                self._flood_up_down(dp, ofp, p, in_port, nxt_port, msg.data)
+                #self._learn_host_edge()
         else:
+            self._flood_down(dp, ofp, p, in_port, msg.data)
+            #self._learn_agg_edge()
+
+
+    def _pick_path(self, dpid):
+        if dpid == S2:
+            return next(self.l2r_paths_cycle)
+        elif dpid == S4:
+            return next(self.r2l_paths_cycle)
+
+    def _flood_up_down(self, dp, ofp, p, in_port, nxt_port, data):
+        ports = DOWN_PORTS[dp.id]
+        actions = [p.OFPActionOutput(port) for port in ports if not port == in_port]
+        dp.send_msg(p.OFPPacketOut(in_port=in_port, datapath=dp, actions=actions, buffer_id=ofp.OFP_NO_BUFFER, data=data))
+        print(f"in here: {nxt_port} {ports}")
+        actions = [p.OFPActionOutput(nxt_port)]
+        dp.send_msg(p.OFPPacketOut(in_port=in_port, datapath=dp, actions=actions, buffer_id=ofp.OFP_NO_BUFFER, data=data))
+    
+    def _flood_down(self, dp, ofp, p, in_port, data):
+        print("flooding")
+        ports = DOWN_PORTS[dp.id]
+        actions = [p.OFPActionOutput(port) for port in ports]
+        dp.send_msg(p.OFPPacketOut(in_port=in_port, datapath=dp, actions=actions, buffer_id=ofp.OFP_NO_BUFFER, data=data))
+  
+        
 
 
