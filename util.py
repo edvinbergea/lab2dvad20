@@ -28,15 +28,15 @@ def getBytes(ttype, config):
     return math.ceil(x)
 
 
-async def runIperf(source, cmd, tmo=20):
+async def runIperf(source, cmd, tmo=5):
     start_time = time.monotonic()
     p = source.popen(cmd + " >/dev/null 2>&1")
     try:
         await asyncio.wait_for(asyncio.to_thread(p.wait), timeout=tmo)
         ct = time.monotonic() - start_time
-        return ct if ct < 1.0 else math.nan
+        return ct 
     except asyncio.TimeoutError:
-        print("An iperf flow timed out!")
+        print(f"An iperf flow timed out after {tmo}s!")
         try:
             p.terminate()
         except Exception:
@@ -44,7 +44,7 @@ async def runIperf(source, cmd, tmo=20):
         return math.nan
 
 
-async def startServers(hd, start_port=5001, n_ports=8, tmo=10):
+async def startServers(hd, start_port=5001, n_ports=8, tmo=20):
     port_pool = []
     servers = [hd.popen(f'iperf -s -p {start_port+i} >/dev/null 2>&1') for i in range(n_ports)]
     needed_ports = [port for port in range(start_port, start_port+n_ports)] 
@@ -75,19 +75,22 @@ async def genDCTraffic(net, source, sink, ttype, flow_rate, t, config):
 
     flows = []
     period = 1.0 / flow_rate
-    clock = time.monotonic()
-    deadline = clock + t
+    next_flow_time = time.monotonic()
+    deadline = next_flow_time + t
 
     i = 0
-    while clock < deadline:
+    while next_flow_time < deadline:
         size = getBytes(ttype, config)
-        port = port_pool[(i % n_ports)-1] 
+        port = port_pool[i % n_ports]
         cport = 40000 + (i % 20000)
         cmd = f'iperf -c {hd.IP()} -p {port} -L {cport} -n {size} -N -y C'
+        
         jitter = random.uniform(0, 0.003)
-        await asyncio.sleep(max(0.0, clock - time.monotonic()) + jitter)
+        sleep_time = max(0.0, next_flow_time - time.monotonic()) + jitter
+        await asyncio.sleep(sleep_time)
+        
         flows.append(asyncio.create_task(runIperf(hs, cmd)))
-        clock += period
+        next_flow_time += period 
         i += 1
 
     res = await asyncio.gather(*flows)
