@@ -146,7 +146,16 @@ class ryuCtrl(app_manager.RyuApp):
         ports = DOWN_PORTS[dp.id]
         actions = [p.OFPActionOutput(port) for port in ports]
         dp.send_msg(p.OFPPacketOut(in_port=in_port, datapath=dp, actions=actions, buffer_id=ofp.OFP_NO_BUFFER, data=data))
+'''
+    def _learn_edge_agg(src, dst):
+        actions = [p.OFPActionOutput(ofp.OFPP_CONTROLLER, ofp.OFPCML_NO_BUFFER)]
+        inst = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
+        match = p.OFPMatch()
+        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_MISS, match=match_all, instructions=inst))
+    def _learn_host_edge():
+
+    def _learn_agg_edge():
   
-        
+'''    
 
 

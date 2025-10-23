@@ -34,7 +34,7 @@ async def runIperf(source, cmd, tmo=20):
     try:
         await asyncio.wait_for(asyncio.to_thread(p.wait), timeout=tmo)
         ct = time.monotonic() - start_time
-        return ct
+        return ct if ct < 1.0 else math.nan
     except asyncio.TimeoutError:
         print("An iperf flow timed out!")
         try:
