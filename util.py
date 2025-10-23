@@ -61,8 +61,8 @@ async def startServers(hd, start_port=5001, n_ports=8, tmo=10):
     return servers, port_pool
 
 
-async def genDCTraffic(source, sink, ttype, flow_rate, t):
-    hs, hd = self.net.get(source, sink)
+async def genDCTraffic(net, source, sink, ttype, flow_rate, t):
+    hs, hd = net.get(source, sink)
 
     for h in (hs, hd):
         h.cmd('pkill -9 iperf iperf3 || true')
@@ -70,7 +70,7 @@ async def genDCTraffic(source, sink, ttype, flow_rate, t):
     hs.cmd(f"ping -c1 -W1 {hd.IP()} >/dev/null 2>&1") 
     hd.cmd(f"ping -c1 -W1 {hs.IP()} >/dev/null 2>&1")
 
-    servers, port_pool = await self.startServers(hd)
+    servers, port_pool = await startServers(hd)
     n_ports = len(port_pool)
 
     flows = []
@@ -80,13 +80,13 @@ async def genDCTraffic(source, sink, ttype, flow_rate, t):
 
     i = 0
     while clock < deadline:
-        size = self.getBytes(ttype)
+        size = getBytes(ttype)
         port = port_pool[(i % n_ports)-1] 
         cport = 40000 + (i % 20000)
         cmd = f'iperf -c {hd.IP()} -p {port} -L {cport} -n {size} -N -y C'
         jitter = random.uniform(0, 0.003)
         await asyncio.sleep(max(0.0, clock - time.monotonic()) + jitter)
-        flows.append(asyncio.create_task(self.runIperf(hs, cmd)))
+        flows.append(asyncio.create_task(runIperf(hs, cmd)))
         clock += period
         i += 1
 
@@ -96,4 +96,28 @@ async def genDCTraffic(source, sink, ttype, flow_rate, t):
     return res
 
 
+def open_config():
+    with open("config.json", "r") as f:
+        return json.load(f)
+         
+
+def getHosts(config):
+    return [f"h{n}" for n in random.sample(range(*config["host_range"]), 2)]
+
+
 def test_dc(net):
+    config = open_config()
+    progress = 0
+    amount_of_tests = config["repetitions"] * (config["flow_rate_range"][1] - config["flow_rate_range"][0])
+    results = []
+    
+    for rep in range(config["repetitions"]):
+        results_flow_rates = []
+        for flow_rate in range(*config["flow_rate_range"]):
+            source, sink = getHosts(config)
+            results_flow_rates.append(asyncio.run(genDCTraffic(net, source, sink, config["traffic_type"], flow_rate, config["test_time"])))
+            progress += 1
+            print(f"Progress: {progress}/{amount_of_tests}")
+        results.append(results_flow_rates)
+    
+    return results
