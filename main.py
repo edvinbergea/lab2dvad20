@@ -1,10 +1,13 @@
-import network
+from network import setup
+from util import test_dc
+import analyze
 import time
-import subprocess
-from mininet.node import RemoteController, OVSSwitch
+import sys
 
 
 if __name__ == "__main__":
     time.sleep(5)
-    network.setup(ctrl_port=6653)
-    print("bye")
+    net = setup(ctrl_port=6653)
+    res = test_dc(net)
+    analyze.analyze(res)
+    print("Bye")

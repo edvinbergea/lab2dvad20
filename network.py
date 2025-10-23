@@ -32,12 +32,17 @@ class OnePod(Topo):
 def setup(ctrl_port=6653):
     topo = OnePod()
     switch = partial(OVSSwitch, protocols='OpenFlow13', failMode='secure')
-    net = Mininet(topo=topo, switch=switch, link=TCLink,
+    link = partial(TCLink, bw=20, delay='1ms', use_tbf=True)
+    net = Mininet(topo=topo, switch=switch, link=link,
                   controller=None, autoSetMacs=True, autoStaticArp=False)
     net.addController('c0', controller=RemoteController, ip='127.0.0.1', port=ctrl_port)
     net.start()
-    net.waitConnected(timeout=5)   # <-- important
-    CLI(net)
+    net.waitConnected(timeout=5)
+    return net
+    #CLI(net)
+    #net.stop()
+
+def clean_up(net):
     net.stop()
 
     
