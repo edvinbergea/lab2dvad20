@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from itertools import chain
 import json
+from util import open_config, open_saved
 
 def analyze(results):
     zipped_results = [list(chain.from_iterable(r)) for r in zip(*results)]
@@ -16,6 +17,33 @@ def analyze(results):
         percentile1.append(np.nanpercentile(r, 1))
 
     return [means, percentile95, percentile99, percentile5, percentile1]
+
+
+def save_results(results):
+    config = open_config()
+    data_dict = {
+        "title": f"{'Web search' if config["traffic_type"] == 1 else 'Data mining'}, 20 Mbps, 1ms",
+        "mean": results[0],
+        "p95": results[1],
+        "p99": results[2],
+        "p5": results[3],
+        "p1": results[4]
+    }
+    saved = open_saved()
+    saved["data"][f"e{len(saved["data"])}"] = data_dict
+    
+    with open("saved.json", "w") as f:
+        json.dump(saved, f, indent=4)
+
+
+def display_results(results):
+    zresults = zip(*results)
+    form = ["Mean: ", "95th: ", "99th: ", "Max: ", "Min: "]
+    print("--- Results ---")
+    for i, line in enumerate(zresults, start=1):
+        formatted = [f"{label}{round(val, 3)}" for label, val in zip(form, line)]
+        print(f"{i} flows/s: {formatted}")
+
 
 def plotResults(saved_results, entry_name):
     data = saved_results["data"][entry_name]
@@ -53,25 +81,3 @@ def plotResults(saved_results, entry_name):
     ax.set_title("title")
     plt.savefig(title, dpi=300, bbox_inches="tight")
 
-def displayResults(results):
-    zresults = zip(*results)
-    form = ["Mean: ", "95th: ", "99th: ", "Max: ", "Min: "]
-    print("--- Results ---")
-    i = 1
-    for line in zresults:
-        print(f"{i} flows/s: {zip(form, line)}")
-        i+=1
-
-def saveResults(results, saved_results, config):
-    data_dict = {
-        "title": f"{'Web search' if config["flow_type"] == 1 else 'Data mining'}, {config["delay"]}, ({config["l1_bw"]},{config["l2_bw"]},{config["l3_bw"]}) Mbps",
-        "mean": results[0],
-        "p95": results[1],
-        "p99": results[2],
-        "p5": results[3],
-        "p1": results[4]
-    }
-    saved_results["data"][f"e{len(saved_results["data"])}"] = data_dict
-    
-    with open("saved_results.json", "w") as f:
-        json.dump(saved_results, f, indent=4)

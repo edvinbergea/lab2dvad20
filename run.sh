@@ -13,5 +13,5 @@ sudo python3 main.py
 
 # When Mininet finishes or is interrupted, kill Ryu
 echo "[+] Cleaning up..."
-sudo mn -c
+sudo mn -c > /dev/null 2>&1 || true
 echo "[+] Done."

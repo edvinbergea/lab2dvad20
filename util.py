@@ -8,10 +8,10 @@ import statistics
 import math
 
 
-def getBytes(ttype):
+def getBytes(ttype, config):
     prob = random.random()
-    xs = [p[0] for p in (web_eCDF if ttype == 1 else data_eCDF)]
-    ys = [p[1] for p in (web_eCDF if ttype == 1 else data_eCDF)]
+    xs = [p[0] for p in (config["web_eCDF"] if ttype == 1 else config["data_eCDF"])]
+    ys = [p[1] for p in (config["web_eCDF"] if ttype == 1 else config["data_eCDF"])]
 
     if prob <= ys[0]:
         x = xs[0]
@@ -61,7 +61,7 @@ async def startServers(hd, start_port=5001, n_ports=8, tmo=10):
     return servers, port_pool
 
 
-async def genDCTraffic(net, source, sink, ttype, flow_rate, t):
+async def genDCTraffic(net, source, sink, ttype, flow_rate, t, config):
     hs, hd = net.get(source, sink)
 
     for h in (hs, hd):
@@ -80,7 +80,7 @@ async def genDCTraffic(net, source, sink, ttype, flow_rate, t):
 
     i = 0
     while clock < deadline:
-        size = getBytes(ttype)
+        size = getBytes(ttype, config)
         port = port_pool[(i % n_ports)-1] 
         cport = 40000 + (i % 20000)
         cmd = f'iperf -c {hd.IP()} -p {port} -L {cport} -n {size} -N -y C'
@@ -101,6 +101,11 @@ def open_config():
         return json.load(f)
          
 
+def open_saved():
+    with open("saved.json", "r") as f:
+        return json.load(f)
+
+
 def getHosts(config):
     return [f"h{n}" for n in random.sample(range(*config["host_range"]), 2)]
 
@@ -115,7 +120,7 @@ def test_dc(net):
         results_flow_rates = []
         for flow_rate in range(*config["flow_rate_range"]):
             source, sink = getHosts(config)
-            results_flow_rates.append(asyncio.run(genDCTraffic(net, source, sink, config["traffic_type"], flow_rate, config["test_time"])))
+            results_flow_rates.append(asyncio.run(genDCTraffic(net, source, sink, config["traffic_type"], flow_rate, config["test_time"], config)))
             progress += 1
             print(f"Progress: {progress}/{amount_of_tests}")
         results.append(results_flow_rates)
