@@ -10,6 +10,8 @@ from ryu.topology.api import get_link, get_switch
 
 PRIO_MISS = 0
 PRIO_LLDP = 1000
+PRIO_LEARN = 100
+
 UP = 1
 DOWN = 0
 
@@ -113,18 +115,13 @@ class ryuCtrl(app_manager.RyuApp):
             nxt_switch = path[i+1]
             print(f"next switch: {nxt_switch}")
             nxt_port = PORTS[dpid][nxt_switch]
-            
-            direction = 1 if in_port in UP_PORTS[dpid] else 0 # 1 if up and 0 if down
 
             if dpid == S1 or dpid == S3:    # In agg layer
                 self._flood_down(dp, ofp, p, in_port, msg.data)
-                #self._learn_edge_agg()
             else:                           # In edge layer
                 self._flood_up_down(dp, ofp, p, in_port, nxt_port, msg.data)
-                #self._learn_host_edge()
         else:
             self._flood_down(dp, ofp, p, in_port, msg.data)
-            #self._learn_agg_edge()
 
 
     def _pick_path(self, dpid):
@@ -146,7 +143,5 @@ class ryuCtrl(app_manager.RyuApp):
         ports = DOWN_PORTS[dp.id]
         actions = [p.OFPActionOutput(port) for port in ports]
         dp.send_msg(p.OFPPacketOut(in_port=in_port, datapath=dp, actions=actions, buffer_id=ofp.OFP_NO_BUFFER, data=data))
-  
-        
 
 
