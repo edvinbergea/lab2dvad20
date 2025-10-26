@@ -10,6 +10,8 @@ from ryu.topology.api import get_link, get_switch
 
 PRIO_MISS = 0
 PRIO_LLDP = 1000
+PRIO_LEARN = 100
+
 UP = 1
 DOWN = 0
 
@@ -118,13 +120,12 @@ class ryuCtrl(app_manager.RyuApp):
 
             if dpid == S1 or dpid == S3:    # In agg layer
                 self._flood_down(dp, ofp, p, in_port, msg.data)
-                #self._learn_edge_agg()
             else:                           # In edge layer
                 self._flood_up_down(dp, ofp, p, in_port, nxt_port, msg.data)
-                #self._learn_host_edge()
+                #self._learn_host_edge(dp, ofp, p, in_port, src)
         else:
             self._flood_down(dp, ofp, p, in_port, msg.data)
-            #self._learn_agg_edge()
+            #self._learn_path()
 
 
     def _pick_path(self, dpid):
@@ -146,16 +147,17 @@ class ryuCtrl(app_manager.RyuApp):
         ports = DOWN_PORTS[dp.id]
         actions = [p.OFPActionOutput(port) for port in ports]
         dp.send_msg(p.OFPPacketOut(in_port=in_port, datapath=dp, actions=actions, buffer_id=ofp.OFP_NO_BUFFER, data=data))
-'''
-    def _learn_edge_agg(src, dst):
-        actions = [p.OFPActionOutput(ofp.OFPP_CONTROLLER, ofp.OFPCML_NO_BUFFER)]
+    '''
+    def _learn_host_edge(self, dp, ofp, p, in_port, src):
+        match = p.OFPMatch(eth_dst=src)
+        actions = [p.OFPActionOutput(in_port)]
         inst = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
-        match = p.OFPMatch()
-        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_MISS, match=match_all, instructions=inst))
-    def _learn_host_edge():
+        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_LEARN, match=match, instructions=inst))
 
-    def _learn_agg_edge():
+    def _install_flood(self, dp, ofp, p, in_port, src, dst):
+        flow = (src, dst)
+        path = self.flow_to_path[flow]
+        match = p.OFPMatch(eth_dst=dst, eth_src=src)
   
-'''    
-
+    '''
 

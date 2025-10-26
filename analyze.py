@@ -30,7 +30,7 @@ def analyze(results):
 def save_results(results):
     config = open_config()
     data_dict = {
-        "title": f"{'Web search' if config["traffic_type"] == 1 else 'Data mining'}, 20 Mbps, 1ms",
+        "title": f"{'Web search' if config["traffic_type"] == 1 else 'Data mining'}, {config["bw"]} Mbps, {config["delay"]}",
         "mean": results[0],
         "conf95": results[1],
         "conf99": results[2],

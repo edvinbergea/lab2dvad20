@@ -6,6 +6,7 @@ import json
 import asyncio
 import statistics
 import math
+import itertools
 
 
 def getBytes(ttype, config):
@@ -44,7 +45,7 @@ async def runIperf(source, cmd, tmo=5):
         return math.nan
 
 
-async def startServers(hd, start_port=5001, n_ports=8, tmo=20):
+async def startServers(hd, start_port=5001, n_ports=128, tmo=20):
     port_pool = []
     servers = [hd.popen(f'iperf -s -p {start_port+i} >/dev/null 2>&1') for i in range(n_ports)]
     needed_ports = [port for port in range(start_port, start_port+n_ports)] 
@@ -109,8 +110,12 @@ def open_saved():
         return json.load(f)
 
 
-def getHosts(config):
+def getHostsRandom(config):
     return [f"h{n}" for n in random.sample(range(*config["host_range"]), 2)]
+
+def getHostCombos(config):
+    hosts = [f"h{n}" for n in range(*config["host_range"])]
+    return list(itertools.permutations(hosts, 2))
 
 
 def test_dc(net):
@@ -118,11 +123,12 @@ def test_dc(net):
     progress = 0
     amount_of_tests = config["repetitions"] * (config["flow_rate_range"][1] - config["flow_rate_range"][0])
     results = []
+    combos = getHostCombos(config) * config["repetitions"]
     
-    for rep in range(config["repetitions"]):
+    for _ in range(config["repetitions"]):
         results_flow_rates = []
         for flow_rate in range(*config["flow_rate_range"]):
-            source, sink = getHosts(config)
+            source, sink = getHostsRandom(config)
             results_flow_rates.append(asyncio.run(genDCTraffic(net, source, sink, config["traffic_type"], flow_rate, config["test_time"], config)))
             progress += 1
             print(f"Progress: {progress}/{amount_of_tests}")

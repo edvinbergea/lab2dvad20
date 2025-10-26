@@ -4,6 +4,7 @@ from mininet.topo import Topo
 from mininet.link import TCLink
 from mininet.cli import CLI
 from functools import partial
+from util import open_config
 
 
 class OnePod(Topo):
@@ -31,8 +32,9 @@ class OnePod(Topo):
 
 def setup(ctrl_port=6653):
     topo = OnePod()
+    config = open_config()
     switch = partial(OVSSwitch, protocols='OpenFlow13', failMode='secure')
-    link = partial(TCLink, bw=20, delay='1ms', use_tbf=True)
+    link = partial(TCLink, bw=config["bw"], delay=config["delay"], use_tbf=True)
     net = Mininet(topo=topo, switch=switch, link=link,
                   controller=None, autoSetMacs=True, autoStaticArp=False)
     net.addController('c0', controller=RemoteController, ip='127.0.0.1', port=ctrl_port)
