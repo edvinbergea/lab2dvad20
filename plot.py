@@ -1,4 +1,4 @@
 from analyze import plotResults
 
 if __name__ == "__main__":
-    plotResults('e5')
+    plotResults('e11')
