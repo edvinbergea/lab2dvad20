@@ -115,17 +115,13 @@ class ryuCtrl(app_manager.RyuApp):
             nxt_switch = path[i+1]
             print(f"next switch: {nxt_switch}")
             nxt_port = PORTS[dpid][nxt_switch]
-            
-            direction = 1 if in_port in UP_PORTS[dpid] else 0 # 1 if up and 0 if down
 
             if dpid == S1 or dpid == S3:    # In agg layer
                 self._flood_down(dp, ofp, p, in_port, msg.data)
             else:                           # In edge layer
                 self._flood_up_down(dp, ofp, p, in_port, nxt_port, msg.data)
-                #self._learn_host_edge(dp, ofp, p, in_port, src)
         else:
             self._flood_down(dp, ofp, p, in_port, msg.data)
-            #self._learn_path()
 
 
     def _pick_path(self, dpid):
@@ -147,17 +143,5 @@ class ryuCtrl(app_manager.RyuApp):
         ports = DOWN_PORTS[dp.id]
         actions = [p.OFPActionOutput(port) for port in ports]
         dp.send_msg(p.OFPPacketOut(in_port=in_port, datapath=dp, actions=actions, buffer_id=ofp.OFP_NO_BUFFER, data=data))
-    '''
-    def _learn_host_edge(self, dp, ofp, p, in_port, src):
-        match = p.OFPMatch(eth_dst=src)
-        actions = [p.OFPActionOutput(in_port)]
-        inst = [p.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
-        dp.send_msg(p.OFPFlowMod(datapath=dp, priority=PRIO_LEARN, match=match, instructions=inst))
 
-    def _install_flood(self, dp, ofp, p, in_port, src, dst):
-        flow = (src, dst)
-        path = self.flow_to_path[flow]
-        match = p.OFPMatch(eth_dst=dst, eth_src=src)
-  
-    '''
 

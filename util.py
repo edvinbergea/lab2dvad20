@@ -113,17 +113,12 @@ def open_saved():
 def getHostsRandom(config):
     return [f"h{n}" for n in random.sample(range(*config["host_range"]), 2)]
 
-def getHostCombos(config):
-    hosts = [f"h{n}" for n in range(*config["host_range"])]
-    return list(itertools.permutations(hosts, 2))
-
 
 def test_dc(net):
     config = open_config()
     progress = 0
     amount_of_tests = config["repetitions"] * (config["flow_rate_range"][1] - config["flow_rate_range"][0])
     results = []
-    combos = getHostCombos(config) * config["repetitions"]
     
     for _ in range(config["repetitions"]):
         results_flow_rates = []

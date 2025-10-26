@@ -41,8 +41,6 @@ def setup(ctrl_port=6653):
     net.start()
     net.waitConnected(timeout=5)
     return net
-    #CLI(net)
-    #net.stop()
 
 def clean_up(net):
     net.stop()

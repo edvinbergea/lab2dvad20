@@ -67,10 +67,8 @@ def plotResults(entry_name):
     conf95_data = data["conf95"]
 
     if isinstance(conf95_data, (list, tuple)) and len(conf95_data) == 2:
-        # Expected format: (low_list, high_list)
         low95, high95 = map(lambda v: np.asarray(v, dtype=float), conf95_data)
     elif isinstance(conf95_data, (list, tuple)) and len(conf95_data) > 0:
-        # Maybe it's a list of (low, high) pairs per data point?
         conf95_array = np.asarray(conf95_data, dtype=float)
         if conf95_array.ndim == 2 and conf95_array.shape[1] == 2:
             low95 = conf95_array[:, 0]
@@ -94,18 +92,15 @@ def plotResults(entry_name):
     else:
         raise ValueError(f"Cannot parse conf99: type={type(conf99_data)}, len={len(conf99_data) if hasattr(conf99_data, '__len__') else 'N/A'}")
    
-    # sanity check
     n = len(mean)
     assert all(len(arr) == n for arr in (low95, high95, low99, high99)), "Length mismatch in inputs"
    
     fig, ax = plt.subplots(figsize=(8, 6))
    
-    # mean bars behind everything else
     ax.bar(xaxis, mean, zorder=1)
    
     box_width = 0.55
     for xi, lo95, hi95, lo99, hi99 in zip(xaxis, low95, high95, low99, high99):
-        # 95% CI box
         rect = plt.Rectangle(
             (xi - box_width/2, lo95),
             box_width,
@@ -117,7 +112,6 @@ def plotResults(entry_name):
         )
         ax.add_patch(rect)
        
-        # whiskers to 99% CI
         ax.plot([xi, xi], [lo99, lo95], color="black", linewidth=1.0, zorder=2)
         ax.plot([xi, xi], [hi95, hi99], color="black", linewidth=1.0, zorder=2)
        
